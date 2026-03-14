@@ -24,8 +24,8 @@ The pipeline has three scripts:
 # All scripts
 pip install pdfplumber pandas openpyxl
 
-# Stage 2 (metadata extraction) — Claude API
-pip install anthropic
+# Stage 2 (metadata extraction) — Claude API + env file loading
+pip install anthropic python-dotenv
 
 # Stage 3 (literature extraction) — GROBID client
 pip install requests lxml
@@ -36,13 +36,13 @@ pip install markdown
 
 ### Anthropic API key (Stage 2)
 
-Open `syllabi_metadata_extraction.py` and paste your key into the variable at the top of the file:
+Create a `.env` file in the project root (it is already listed in `.gitignore` and will never be committed):
 
-```python
-ANTHROPIC_API_KEY = "your-api-key-here"
+```
+ANTHROPIC_API_KEY=your-api-key-here
 ```
 
-If the key is not set, the script falls back to regex heuristics for field inference.
+The script loads this file automatically at startup. If the key is not set, it falls back to regex heuristics for field inference.
 
 ### GROBID (Stage 3 only)
 
@@ -56,6 +56,7 @@ A GROBID server must be running locally at `http://localhost:8070` before runnin
 .
 ├── Syllabi to Draw From/                  # Place input syllabus PDFs here
 │
+├── .env                                   # API key (not committed — see .gitignore)
 ├── syllabi_text_review.py                 # Stage 1: text extraction viewer
 ├── syllabi_metadata_extraction.py         # Stage 2: course metadata extraction
 ├── syllabus_literature_extraction.py      # Stage 3: reading-list extraction
