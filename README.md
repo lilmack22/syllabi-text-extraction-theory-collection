@@ -10,7 +10,7 @@ The pipeline has three extraction stages plus two optional visualization scripts
 
 1. **`syllabi_text_review.py`** *(optional)* — extracts raw text from each PDF using pdfplumber and produces a browser-based viewer for reviewing the extracted content before running the main pipeline.
 2. **`syllabi_metadata_extraction.py`** — extracts course-level metadata from each syllabus PDF (title, professor(s), university, year, term) using pdfplumber for text extraction and the Claude API for intelligent field inference. Writes `syllabi_metadata.xlsx` and `syllabi_metadata.csv`.
-3. **`syllabus_literature_extraction.py`** — extracts every bibliographic reference from the reading lists in each syllabus using GROBID, deduplicates entries that appear across multiple syllabi, and writes a formatted Excel workbook with dropdown validation. Also saves per-syllabus JSON files to `extracted_references/`.
+3. **`syllabus_literature_extraction.py`** — extracts every bibliographic reference from the reading lists in each syllabus using the Claude API, deduplicates entries that appear across multiple syllabi, enriches missing DOIs via Crossref, and writes a formatted Excel workbook with dropdown validation. Also saves per-syllabus JSON files to `extracted_references/`.
 4. **`reading_leaderboard.py`** *(optional)* — generates an interactive HTML bar chart ranking readings by how many syllabi they appear in. Reads `literature_from_selected_syllabi.xlsx` and writes `reading_leaderboard.html`.
 5. **`newest_readings_leaderboard.py`** *(optional)* — generates an HTML leaderboard of the most recently published readings, sorted by year (newest first). Reads `literature_from_selected_syllabi.xlsx` and writes `newest_readings_leaderboard.html`.
 
@@ -26,17 +26,17 @@ The pipeline has three extraction stages plus two optional visualization scripts
 # All scripts
 pip install pdfplumber pandas openpyxl
 
-# Stage 2 (metadata extraction) — Claude API + env file loading
+# Stages 2 & 3 (metadata + literature extraction) — Claude API + env file loading
 pip install anthropic python-dotenv
 
-# Stage 3 (literature extraction) — GROBID client
-pip install requests lxml
+# Stage 3 (literature extraction) — Crossref DOI enrichment
+pip install requests
 
 # Stage 1 (text review) — optional markdown rendering
 pip install markdown
 ```
 
-### Anthropic API key (Stage 2)
+### Anthropic API key (Stages 2 & 3)
 
 Create a `.env` file in the project root (it is already listed in `.gitignore` and will never be committed):
 
@@ -44,11 +44,7 @@ Create a `.env` file in the project root (it is already listed in `.gitignore` a
 ANTHROPIC_API_KEY=your-api-key-here
 ```
 
-The script loads this file automatically at startup. If the key is not set, it falls back to regex heuristics for field inference.
-
-### GROBID (Stage 3 only)
-
-A GROBID server must be running locally at `http://localhost:8070` before running `syllabus_literature_extraction.py`. See the [GROBID documentation](https://grobid.readthedocs.io/en/latest/Grobid-service/) for setup instructions. GROBID is **not** required for Stages 1 or 2.
+The scripts load this file automatically at startup. For Stage 2, if the key is not set, it falls back to regex heuristics for field inference. Stage 3 requires a valid key.
 
 ---
 
@@ -73,7 +69,7 @@ A GROBID server must be running locally at `http://localhost:8070` before runnin
 ├── syllabi_metadata.csv                   # Output of Stage 2 (CSV copy)
 │
 ├── extracted_references/                  # Output of Stage 3 (per-syllabus JSON)
-│   └── <class label>.json                 #   Raw GROBID references per syllabus
+│   └── <class label>.json                 #   Extracted references per syllabus
 ├── literature_from_selected_syllabi.xlsx  # Output of Stage 3 (combined workbook)
 │
 ├── reading_leaderboard.html               # Output of Stage 4
@@ -130,7 +126,7 @@ Year and term are always seeded from the PDF filename first (most reliable sourc
 python syllabus_literature_extraction.py
 ```
 
-Requires GROBID to be running. Reads all PDFs from `Syllabi to Draw From/`, calls GROBID `processFulltextDocument` with citation consolidation, and produces `literature_from_selected_syllabi.xlsx`.
+Reads all PDFs from `Syllabi to Draw From/`, uses pdfplumber to extract text, sends it to the Claude API in chunks to identify and parse every assigned reading, then queries Crossref to fill in missing DOIs. Produces `literature_from_selected_syllabi.xlsx` and saves intermediate per-syllabus results to `extracted_references/`.
 
 Readings that appear in more than one syllabus are deduplicated using token-level Jaccard similarity on normalised titles (threshold: 0.82).
 
@@ -138,7 +134,7 @@ The output workbook contains two sheets:
 - **Literature** — one row per unique reference with columns for citation, authors, year, title, journal/publication, issue/pages, DOI link, source type, date added, and the class(es) where the reading appeared
 - **_ClassList** — reference sheet used by Excel dropdown validation for the "Class/es" column
 
-Source type is inferred heuristically: journal articles, books, and white papers are distinguished by the structure of the GROBID TEI `<biblStruct>` element. Class labels in the "Class/es" column are built from `syllabi_metadata.xlsx` in the format `"Course Title" Professor(s) – Term Year`; if that file is absent, raw PDF filenames are used.
+Source type is classified by Claude during extraction. Class labels in the "Class/es" column are built from `syllabi_metadata.xlsx` in the format `"Course Title" Professor(s) – Term Year`; if that file is absent, raw PDF filenames are used.
 
 ---
 
