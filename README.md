@@ -6,13 +6,15 @@ A pipeline that extracts structured metadata and reading-list references from co
 
 ## Overview
 
-The pipeline has three scripts:
+The pipeline has three extraction stages plus two optional visualization scripts:
 
 1. **`syllabi_text_review.py`** *(optional)* — extracts raw text from each PDF using pdfplumber and produces a browser-based viewer for reviewing the extracted content before running the main pipeline.
 2. **`syllabi_metadata_extraction.py`** — extracts course-level metadata from each syllabus PDF (title, professor(s), university, year, term) using pdfplumber for text extraction and the Claude API for intelligent field inference. Writes `syllabi_metadata.xlsx` and `syllabi_metadata.csv`.
-3. **`syllabus_literature_extraction.py`** — extracts every bibliographic reference from the reading lists in each syllabus using GROBID, deduplicates entries that appear across multiple syllabi, and writes a formatted Excel workbook with dropdown validation.
+3. **`syllabus_literature_extraction.py`** — extracts every bibliographic reference from the reading lists in each syllabus using GROBID, deduplicates entries that appear across multiple syllabi, and writes a formatted Excel workbook with dropdown validation. Also saves per-syllabus JSON files to `extracted_references/`.
+4. **`reading_leaderboard.py`** *(optional)* — generates an interactive HTML bar chart ranking readings by how many syllabi they appear in. Reads `literature_from_selected_syllabi.xlsx` and writes `reading_leaderboard.html`.
+5. **`newest_readings_leaderboard.py`** *(optional)* — generates an HTML leaderboard of the most recently published readings, sorted by year (newest first). Reads `literature_from_selected_syllabi.xlsx` and writes `newest_readings_leaderboard.html`.
 
-> **Run order:** Stage 1 → Stage 2 → Stage 3. Stage 3 reads `syllabi_metadata.xlsx` produced by Stage 2 to build descriptive class labels.
+> **Run order:** Stage 1 → Stage 2 → Stage 3. Stages 4 and 5 can be run any time after Stage 3. Stage 3 reads `syllabi_metadata.xlsx` produced by Stage 2 to build descriptive class labels.
 
 ---
 
@@ -60,6 +62,8 @@ A GROBID server must be running locally at `http://localhost:8070` before runnin
 ├── syllabi_text_review.py                 # Stage 1: text extraction viewer
 ├── syllabi_metadata_extraction.py         # Stage 2: course metadata extraction
 ├── syllabus_literature_extraction.py      # Stage 3: reading-list extraction
+├── reading_leaderboard.py                 # Stage 4: cross-syllabus frequency leaderboard
+├── newest_readings_leaderboard.py         # Stage 5: most-recent readings leaderboard
 │
 ├── text_review/                           # Output of Stage 1
 │   ├── <syllabus name>.md                 #   Raw extracted text per syllabus
@@ -67,7 +71,13 @@ A GROBID server must be running locally at `http://localhost:8070` before runnin
 │
 ├── syllabi_metadata.xlsx                  # Output of Stage 2
 ├── syllabi_metadata.csv                   # Output of Stage 2 (CSV copy)
-└── literature_from_selected_syllabi.xlsx  # Output of Stage 3
+│
+├── extracted_references/                  # Output of Stage 3 (per-syllabus JSON)
+│   └── <class label>.json                 #   Raw GROBID references per syllabus
+├── literature_from_selected_syllabi.xlsx  # Output of Stage 3 (combined workbook)
+│
+├── reading_leaderboard.html               # Output of Stage 4
+└── newest_readings_leaderboard.html       # Output of Stage 5
 ```
 
 ---
@@ -129,6 +139,30 @@ The output workbook contains two sheets:
 - **_ClassList** — reference sheet used by Excel dropdown validation for the "Class/es" column
 
 Source type is inferred heuristically: journal articles, books, and white papers are distinguished by the structure of the GROBID TEI `<biblStruct>` element. Class labels in the "Class/es" column are built from `syllabi_metadata.xlsx` in the format `"Course Title" Professor(s) – Term Year`; if that file is absent, raw PDF filenames are used.
+
+---
+
+### Stage 4 — Reading frequency leaderboard
+
+```bash
+python reading_leaderboard.py
+```
+
+Reads `literature_from_selected_syllabi.xlsx` and produces `reading_leaderboard.html`: an interactive bar chart ranking readings by how many syllabi they appear in. Only readings that appear in at least `MIN_SYLLABI` syllabi (default: 2) are included. The page also lists all analyzed syllabi with course title, instructors, term, year, and university pulled from `syllabi_metadata.xlsx`.
+
+Open `reading_leaderboard.html` in a browser — no server required.
+
+---
+
+### Stage 5 — Newest readings leaderboard
+
+```bash
+python newest_readings_leaderboard.py
+```
+
+Reads `literature_from_selected_syllabi.xlsx` and produces `newest_readings_leaderboard.html`: a sortable HTML table of the top `TOP_N` most recently published readings (default: 50), sorted by year (newest first). Each row shows title, authors, year, publication venue, DOI link, and the syllabus/syllabi where the reading was assigned.
+
+Open `newest_readings_leaderboard.html` in a browser — no server required.
 
 ---
 
